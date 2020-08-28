@@ -2,11 +2,13 @@ package org.matsim.codeexamples.population.demandGeneration;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.TransportMode;
+import org.matsim.api.core.v01.network.Network;
 import org.matsim.api.core.v01.population.Activity;
 import org.matsim.api.core.v01.population.Leg;
 import org.matsim.api.core.v01.population.Person;
@@ -14,6 +16,8 @@ import org.matsim.api.core.v01.population.Plan;
 import org.matsim.api.core.v01.population.Population;
 import org.matsim.api.core.v01.population.PopulationWriter;
 import org.matsim.core.config.ConfigUtils;
+import org.matsim.core.network.NetworkUtils;
+import org.matsim.api.core.v01.network.Node;
 import org.matsim.core.scenario.ScenarioUtils;
 import org.matsim.core.utils.geometry.CoordinateTransformation;
 import org.matsim.core.utils.geometry.transformations.TransformationFactory;
@@ -49,28 +53,43 @@ public class RunPPopulationGenerator implements Runnable {
 	private void fillZoneData() {
 		// Add the locations you want to use here.
 		// (with proper coordinates)
-		zoneGeometries.put("home1", new Coord((double) 0, (double) 1));
-		zoneGeometries.put("work1", new Coord((double) 50, (double) 0));
+		Network net = NetworkUtils.readNetwork("./output/network.xml");
+		int i = 0;
+		for (Node node : net.getNodes().values()) {
+			zoneGeometries.put("home".concat(String.valueOf(i)), node.getCoord());
+			zoneGeometries.put("work".concat(String.valueOf(i)), node.getCoord());
+			i++;
+		}
 	}
 
 	private void generatePopulation() {
-		generateHomeWorkHomeTrips("home1", "work1", 20); // create 20 trips from zone 'home1' to 'work1'
-		//... generate more trips here
+		Network net = NetworkUtils.readNetwork("./output/network.xml");
+		Random rand = new Random();
+		int trips = 100;
+		int h_id;
+		int w_id;
+		for (int j=0; j < trips; j++) {
+			do {
+				h_id = rand.nextInt(net.getNodes().size());
+				w_id = rand.nextInt(net.getNodes().size());
+			} while (h_id == w_id);
+			generateHomeWorkHomeTrips("home".concat(String.valueOf(h_id)), "work".concat(String.valueOf(w_id)), 1, j);
+		}
 	}
 
-	private void generateHomeWorkHomeTrips(String from, String to, int quantity) {
+	private void generateHomeWorkHomeTrips(String from, String to, int quantity, int passenger_id) {
 		for (int i=0; i<quantity; ++i) {
 			Coord source = zoneGeometries.get(from);
 			Coord sink = zoneGeometries.get(to);
-			Person person = population.getFactory().createPerson(createId(from, to, i, TransportMode.car));
+			Person person = population.getFactory().createPerson(createId(from, to, passenger_id+i, TransportMode.car));
 			Plan plan = population.getFactory().createPlan();
-			Coord homeLocation = shoot(ct.transform(source));
-			Coord workLocation = shoot(ct.transform(sink));
+			Coord homeLocation = shoot(source);
+			Coord workLocation = shoot(sink);
 			plan.addActivity(createHome(homeLocation));
 			plan.addLeg(createDriveLeg());
 			plan.addActivity(createWork(workLocation));
-			plan.addLeg(createDriveLeg());
-			plan.addActivity(createHome(homeLocation));
+//			plan.addLeg(createDriveLeg());
+//			plan.addActivity(createHome(homeLocation));
 			person.addPlan(plan);
 			population.addPerson(person);
 		}
@@ -89,13 +108,14 @@ public class RunPPopulationGenerator implements Runnable {
 
 	private Activity createWork(Coord workLocation) {
 		Activity activity = population.getFactory().createActivityFromCoord("work", workLocation);
-		activity.setEndTime(17*60*60);
+		activity.setEndTime(24*60*60); //[s]
 		return activity;
 	}
 
 	private Activity createHome(Coord homeLocation) {
+		Random rand = new Random();
 		Activity activity = population.getFactory().createActivityFromCoord("home", homeLocation);
-		activity.setEndTime(9*60*60);
+		activity.setEndTime(rand.nextInt(24*60*60)); //[s]
 		return activity;
 	}
 
